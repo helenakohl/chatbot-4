@@ -52,7 +52,7 @@ export const ChatMessage: React.FC<React.PropsWithChildren<Props>> = ({
   ) : (
     <div className="flex flex-col items-start">
     <div className="flex items-center mb-2">
-      <p className="text-center">Bot</p>
+      <p className="text-center">Assistant</p>
     </div>
       <div className="bg-gray-100 border-gray-300 border-2 rounded-lg p-2 mr-20 w-full">
         <ReactMarkdown
