@@ -1,5 +1,6 @@
 import { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { appConfig } from "../../config.browser";
+import { v4 as uuidv4 } from 'uuid';
 
 const API_PATH = "/api/chat";
 
@@ -27,6 +28,7 @@ function streamAsyncIterator(stream: ReadableStream) {
 }
 
 export function useChat() {
+  const [userId, setUserId] = useState<string | null>(null);
   const [currentChat, setCurrentChat] = useState<string | null>(null);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [state, setState] = useState<"idle" | "waiting" | "loading">("idle");
@@ -34,6 +36,33 @@ export function useChat() {
 
    // Lets us cancel the stream
   const abortController = useMemo(() => new AbortController(), []);
+
+  useEffect(() => {
+    const storedUserId = localStorage.getItem('chatUserId');
+    if (storedUserId) {
+      setUserId(storedUserId);
+    } else {
+      const newUserId = uuidv4();
+      localStorage.setItem('chatUserId', newUserId);
+      setUserId(newUserId);
+    }
+  }, []);
+
+  const writeToGoogleSheet = async (message: string, from: 'user' | 'assistant') => {
+    if (!userId) return;
+    
+    try {
+      const response = await fetch('/.netlify/functions/logMessages', {
+        method: 'POST',
+        body: JSON.stringify({ message, from, userId }),
+      });
+      if (!response.ok) {
+        console.error('Failed to write to Google Sheet');
+      }
+    } catch (error) {
+      console.error('Error writing to Google Sheet:', error);
+    }
+  };
 
   //Cancels the current chat and adds the current chat to the history
   function cancel() {
@@ -72,6 +101,10 @@ export function useChat() {
       ...chatHistory,
       { role: "user", content: message } as const,
     ];
+
+    //Log user's message
+    await writeToGoogleSheet(message, 'user');
+
     setChatHistory(newHistory);
     const body = JSON.stringify({
       messages: newHistory.slice(-appConfig.historyLength),
@@ -111,6 +144,9 @@ export function useChat() {
       ...curr,
       { role: "assistant", content: fullResponse } as const,
     ]);
+
+    //Log assitant's respons
+    writeToGoogleSheet(fullResponse, 'assistant');
 
     //add longer response time
     setCurrentChat(null);
