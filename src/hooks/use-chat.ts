@@ -32,7 +32,6 @@ export function useChat() {
   const [currentChat, setCurrentChat] = useState<string | null>(null);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [state, setState] = useState<"idle" | "waiting" | "loading">("idle");
-  const [assitantSpeaking, setAssitantSpeaking] = useState(false);
 
    // Lets us cancel the stream
   const abortController = useMemo(() => new AbortController(), []);
@@ -85,18 +84,15 @@ export function useChat() {
     setChatHistory([]);
   }
 
+  // Delay function
+  const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
   
   // Sends a new message to the AI function and streams the response
   const sendMessage = async (
     message: string,
     chatHistory: Array<ChatMessage>,
   ) => {
-    if (assitantSpeaking) {
-      console.log("Cannot send message while assistant is speaking");
-      return;
-    }
     setState("waiting");
-    let chatContent = "";
     const newHistory = [
       ...chatHistory,
       { role: "user", content: message } as const,
@@ -119,6 +115,9 @@ export function useChat() {
     });
 
     setCurrentChat("Typing ...");
+
+    // Add a delay before fetching the response
+    await delay(5000); 
 
     if (!res.ok || !res.body) {
       setState("idle");
@@ -153,5 +152,5 @@ export function useChat() {
     setState("idle"); 
   };
 
-  return { sendMessage, currentChat, chatHistory, cancel, clear, state, assitantSpeaking };
+  return { sendMessage, currentChat, chatHistory, cancel, clear, state };
 }
