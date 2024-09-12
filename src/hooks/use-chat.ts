@@ -33,8 +33,33 @@ export function useChat() {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [state, setState] = useState<"idle" | "waiting" | "loading">("idle");
 
-   // Lets us cancel the stream
+  // Lets us cancel the stream
   const abortController = useMemo(() => new AbortController(), []);
+
+  function debounce<T extends (...args: any[]) => any>(
+    func: T,
+    wait: number,
+    immediate = false
+  ): (...args: Parameters<T>) => void {
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+  
+    return function(this: any, ...args: Parameters<T>) {
+      const context = this;
+  
+      const later = function() {
+        timeout = null;
+        if (!immediate) func.apply(context, args);
+      };
+  
+      const callNow = immediate && !timeout;
+  
+      if (timeout) clearTimeout(timeout);
+  
+      timeout = setTimeout(later, wait);
+  
+      if (callNow) func.apply(context, args);
+    };
+  }
 
   useEffect(() => {
     const storedUserId = localStorage.getItem('chatUserId');
@@ -63,7 +88,7 @@ export function useChat() {
     }
   };
 
-  //Cancels the current chat and adds the current chat to the history
+  // Cancels the current chat and adds the current chat to the history
   function cancel() {
     setState("idle");
     abortController.abort();
@@ -86,22 +111,27 @@ export function useChat() {
 
   // Delay function
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-  
+
   // Sends a new message to the AI function and streams the response
-  const sendMessage = async (
+  const sendMessageImpl = useCallback(async (
     message: string,
     chatHistory: Array<ChatMessage>,
   ) => {
+    if (state !== "idle") {
+      console.log("Cannot send message while processing");
+      return;
+    }
+
     setState("waiting");
     const newHistory = [
       ...chatHistory,
       { role: "user", content: message } as const,
     ];
 
-    //Log user's message
     await writeToGoogleSheet(message, 'user');
 
     setChatHistory(newHistory);
+
     const body = JSON.stringify({
       messages: newHistory.slice(-appConfig.historyLength),
     });
@@ -116,8 +146,7 @@ export function useChat() {
 
     setCurrentChat("Typing ...");
 
-    // Add a delay before fetching the response
-    await delay(5000); 
+    await delay(5000);
 
     if (!res.ok || !res.body) {
       setState("idle");
@@ -144,13 +173,13 @@ export function useChat() {
       { role: "assistant", content: fullResponse } as const,
     ]);
 
-    //Log assitant's respons
     writeToGoogleSheet(fullResponse, 'assistant');
 
-    //add longer response time
     setCurrentChat(null);
-    setState("idle"); 
-  };
+    setState("idle");
+  }, [state, abortController, writeToGoogleSheet]);
+
+  const sendMessage = useMemo(() => debounce(sendMessageImpl, 300, true), [sendMessageImpl]);
 
   return { sendMessage, currentChat, chatHistory, cancel, clear, state };
 }
